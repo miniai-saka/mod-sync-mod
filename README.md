@@ -14,11 +14,6 @@ Minecraft **1.20.1 / Fabric / Java 17** 用のModです。サーバーが指定�
 
 ## ダウンロード
 
-| バージョン | 主な仕様 |
-|---|---|
-| [1.1.0](https://github.com/miniai-saka/mod-sync-mod/releases/tag/v1.1.0) | 最新版。ゲームと同期で同じTCPポートを使用。 |
-| [1.0.0](https://github.com/miniai-saka/mod-sync-mod/releases/tag/v1.0.0) | 初回リリース。同期用ポートは既定で25566。 |
-
 Releasesの `fabric-mod-sync.jar` をクライアントと専用サーバーの両方に入れます。Fabric APIも必要です。配布ZIPには設定例、説明書、任意で使う起動前ヘルパー、ソースを含めています。MD5・SHA-256一覧も各リリースに添付しています。
 
 Minecraftと同期通信は同じTCPポートを使います。既定は25565です。
