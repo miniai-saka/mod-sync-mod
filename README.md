@@ -2,6 +2,15 @@
 
 Minecraft **1.20.1 / Fabric / Java 17** 用のModです。サーバーが指定するMod構成を起動時に確認し、ユーザーの承諾後に差分のあるJARだけをダウンロードします。MD5・SHA-256照合、旧版・余分なModのバックアップ、完全同期、自動再起動に対応します。
 
+<table>
+  <tr>
+    <td><img src="https://github.com/user-attachments/assets/d51be9f1-ed9c-46c3-9d9b-fba5651989ec" alt="image1"></td>
+    <td><img src="https://github.com/user-attachments/assets/2d1a35f5-6705-46a1-8416-e2660b2ff648" alt="image2"></td>
+    <td><img src="https://github.com/user-attachments/assets/6cdd378c-48e2-4fa0-beae-ff89dd771cb0" alt="image3"></td>
+  </tr>
+</table>
+
+
 ## ダウンロード
 
 | バージョン | 主な仕様 |
