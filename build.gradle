@@ -6,6 +6,7 @@ plugins {
 version = project.mod_version
 group = project.maven_group
 base { archivesName = project.archives_base_name }
+if (System.getenv('MODSYNC_BUILD_DIR')) layout.buildDirectory = file(System.getenv('MODSYNC_BUILD_DIR'))
 repositories { mavenCentral() }
 configurations { helperLibraries }
 
@@ -14,16 +15,21 @@ dependencies {
     mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+    include implementation('io.netty:netty-codec-http:4.1.82.Final')
     helperLibraries 'com.google.code.gson:gson:2.10.1'
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testImplementation 'com.google.code.gson:gson:2.10.1'
     testImplementation 'net.java.dev.jna:jna:5.12.1'
+    testImplementation 'io.netty:netty-codec-http:4.1.82.Final'
+    testImplementation 'io.netty:netty-transport:4.1.82.Final'
+    testImplementation 'io.netty:netty-handler:4.1.82.Final'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 loom {
     splitEnvironmentSourceSets()
+    mixin { defaultRefmapName = 'fabric-mod-sync.refmap.json' }
     runs { server { runDir System.getenv('MODSYNC_SERVER_RUN_DIR') ?: 'run/server' } }
     mods {
         'fabric_mod_sync' {
@@ -67,7 +73,7 @@ tasks.register('helperJar', Jar) {
 jar {
     dependsOn tasks.helperJar
     from(tasks.named('helperJar').flatMap { it.archiveFile }) { rename { 'modsync-helper.jar' } }
-    from('LICENSE')
+    from('LICENSE', 'NETTY-LICENSE.txt', 'NETTY-NOTICE.txt', 'THIRD-PARTY-NOTICES.txt')
 }
 
 tasks.register('sourceBundle', Zip) {

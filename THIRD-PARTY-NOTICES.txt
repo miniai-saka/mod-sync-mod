@@ -6,3 +6,9 @@ The full license text is in GSON-LICENSE.txt.
 Minecraft, Fabric Loader, Fabric API and JNA are runtime/development dependencies;
 they are not redistributed as separate libraries in the Mod JAR.
 The standalone helper includes only the project's core classes and Gson.
+
+The Mod JAR additionally embeds Netty HTTP Codec 4.1.82.Final as a Fabric nested JAR,
+matching the Netty version provided by Minecraft 1.20.1.
+Netty is licensed under the Apache License, Version 2.0.
+Its license and third-party notices are included as NETTY-LICENSE.txt and
+NETTY-NOTICE.txt. Source: https://github.com/netty/netty/tree/netty-4.1.82.Final

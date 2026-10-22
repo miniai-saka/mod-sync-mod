@@ -9,6 +9,7 @@ import java.net.http.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
+import java.util.regex.Pattern;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.jar.*;
@@ -22,7 +23,7 @@ class SyncIntegrationTest {
         Files.createDirectories(server.resolve("mods")); Files.createDirectories(game.resolve("mods"));
         mod(server, "sync.jar", "fabric_mod_sync", "bootstrap");
         Files.copy(server.resolve("mods/sync.jar"), game.resolve("mods/sync.jar"));
-        ServerConfig c = new ServerConfig(); c.bindAddress = "127.0.0.1"; c.port = 0;
+        ServerConfig c = new ServerConfig();
         Json.write(server.resolve("config/fabric-mod-sync-server.json"), c);
     }
     static Path mod(Path game, String name, String id, String content) throws IOException {
@@ -34,7 +35,7 @@ class SyncIntegrationTest {
         }
         return path;
     }
-    PackServer start() throws IOException { PackServer s = new PackServer(server, "1.20.1", "0.19.5"); s.start(); return s; }
+    PackServer start() throws IOException { PackServer s = new PackServer(server, "1.20.1", "0.19.5", new InetSocketAddress("127.0.0.1", 0)); s.start(); return s; }
     SyncTransport transport(PackServer service) throws IOException {
         ClientConfig c = new ClientConfig(); c.server = "127.0.0.1:" + service.port(); return new SyncTransport(c);
     }
@@ -204,6 +205,10 @@ class SyncIntegrationTest {
                 long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
                 while (!Files.exists(marker) && System.nanoTime() < deadline) Thread.sleep(50);
                 assertEquals("restarted", Files.readString(marker)); Transaction.verifyExact(game, p.manifest());
+                var pid = Pattern.compile("restarted client PID (\\d+)").matcher(Files.readString(game.resolve("logs/mod-sync-updater.log")));
+                assertTrue(pid.find());
+                var restarted = ProcessHandle.of(Long.parseLong(pid.group(1)));
+                if (restarted.isPresent()) restarted.get().onExit().get(5, TimeUnit.SECONDS);
             } finally { parent.destroyForcibly(); if (helper != null) helper.destroyForcibly(); }
         }
     }

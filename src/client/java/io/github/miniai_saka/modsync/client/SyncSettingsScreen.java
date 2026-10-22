@@ -50,7 +50,7 @@ public final class SyncSettingsScreen extends Screen {
         renderBackground(c);
         c.drawCenteredTextWithShadow(textRenderer, title, width / 2, 15, 0xFFFFFF);
         int left = width / 2 - 150, top = Math.max(36, height / 2 - 85);
-        c.drawTextWithShadow(textRenderer, Text.literal("同期サーバー (例: example.com:25566)"), left, top + 30, 0xCCCCCC);
+        c.drawTextWithShadow(textRenderer, Text.literal("同期サーバー (ゲームと同じポート: 25565等)"), left, top + 30, 0xCCCCCC);
         c.drawTextWithShadow(textRenderer, Text.literal("アクセストークン（サーバー設定時のみ）"), left, top + 73, 0xCCCCCC);
         if (!error.isEmpty()) ScreenText.wrapped(c, textRenderer, error, width / 2, top + 145, width - 40, 0xFF7777);
         super.render(c, x, y, delta);

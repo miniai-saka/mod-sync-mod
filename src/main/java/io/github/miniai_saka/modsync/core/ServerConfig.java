@@ -6,8 +6,6 @@ import java.util.*;
 
 public final class ServerConfig {
     public boolean enabled = true;
-    public String bindAddress = "0.0.0.0";
-    public int port = 25566;
     public String sourceDirectory = "mods";
     public boolean syncAllFiles = true;
     public boolean syncSelectedFiles = true;
@@ -16,7 +14,7 @@ public final class ServerConfig {
     public Map<String, Boolean> files = new TreeMap<>();
     public static ServerConfig load(Path path) throws IOException {
         ServerConfig c = Files.exists(path) ? Json.read(path, ServerConfig.class) : new ServerConfig();
-        if (c.bindAddress == null || c.port < 0 || c.port > 65535 || c.sourceDirectory == null || c.files == null || c.accessToken == null || c.maxBytesPerSecond < 0)
+        if (c.sourceDirectory == null || c.files == null || c.accessToken == null || c.maxBytesPerSecond < 0)
             throw new IOException("Invalid server config");
         return c;
     }

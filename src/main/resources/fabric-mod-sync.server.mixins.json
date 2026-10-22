@@ -1,0 +1,8 @@
+{
+  "required": true,
+  "package": "io.github.miniai_saka.modsync.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "fabric-mod-sync.refmap.json",
+  "mixins": ["ServerNetworkIoMixin"],
+  "injectors": {"defaultRequire": 1}
+}

@@ -6,7 +6,7 @@ import java.nio.file.*;
 
 public final class ClientConfig {
     public boolean enabled = false;
-    public String server = "localhost:25566";
+    public String server = "localhost:25565";
     public String accessToken = "";
     public static ClientConfig load(Path path) throws IOException {
         ClientConfig c = Files.exists(path) ? Json.read(path, ClientConfig.class) : new ClientConfig();
@@ -24,6 +24,6 @@ public final class ClientConfig {
                     || uri.getPort() == 0 || uri.getPort() > 65535)
                 throw new IllegalArgumentException();
             return new URI(uri.getScheme(), null, uri.getHost(), uri.getPort(), "/", null, null);
-        } catch (Exception e) { throw new IOException("ドメイン:ポートを確認してください (例: localhost:25566)"); }
+        } catch (Exception e) { throw new IOException("ドメイン:ポートを確認してください (例: localhost:25565)"); }
     }
 }

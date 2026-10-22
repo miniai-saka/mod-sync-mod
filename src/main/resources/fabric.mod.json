@@ -11,6 +11,7 @@
     "server": ["io.github.miniai_saka.modsync.ModSyncServer"],
     "client": ["io.github.miniai_saka.modsync.client.ModSyncClient"]
   },
+  "mixins": [{"config": "fabric-mod-sync.server.mixins.json", "environment": "server"}],
   "depends": {
     "fabricloader": ">=0.15.0",
     "minecraft": "1.20.1",

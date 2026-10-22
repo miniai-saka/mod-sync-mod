@@ -20,7 +20,7 @@ public final class SyncTransport {
     public interface Progress { void update(String file, int index, int count, long done, long total); }
     public SyncTransport(ClientConfig config) throws IOException {
         base = config.baseUri(); token = config.accessToken;
-        http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(8)).followRedirects(HttpClient.Redirect.NEVER).build();
+        http = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).connectTimeout(Duration.ofSeconds(8)).followRedirects(HttpClient.Redirect.NEVER).build();
     }
     private HttpRequest.Builder request(String path, Duration timeout) {
         HttpRequest.Builder b = HttpRequest.newBuilder(base.resolve(path)).timeout(timeout).GET();

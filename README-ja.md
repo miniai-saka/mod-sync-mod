@@ -1,13 +1,13 @@
-# Fabric Mod Sync 1.0.0
+# Fabric Mod Sync 1.1.0
 
 Minecraft **1.20.1 / Fabric / Java 17** 向けの、サーバー指定Mod構成への同期Modです。同じMod JARをクライアントと専用サーバーに入れます。Fabric APIも必要です。
 
 ## 導入
 
-1. クライアントとサーバーの `mods` に `fabric-mod-sync-1.0.0.jar` を入れます。
+1. クライアントとサーバーの `mods` に `fabric-mod-sync-1.1.0.jar` を入れます。
 2. 専用サーバーを起動します。`config/fabric-mod-sync-server.json` が作成され、Modファイル一覧も自動登録されます。
-3. 同期用TCPポートを公開します。初期値は **25566**。通常のMinecraft接続ポート25565とは別です。
-4. クライアントの「設定」右上にある **Mod同期設定** を開き、`example.com:25566` のように入力します。
+3. 通常のMinecraft用TCPポートを公開します。同期通信も同じポートを使います。標準は **25565** で、同期専用ポートの開放は不要です。
+4. クライアントの「設定」右上にある **Mod同期設定** を開き、ゲームと同じ `example.com:25565` のように入力します。
 5. 「起動時の同期」を有効にして保存します。「保存して今すぐ確認」でその場で確認することもできます。
 
 初期状態のクライアント同期は無効です。接続先を設定してから有効にしてください。サーバーとクライアントの **Fabric Loaderのバージョンも同一** にしてください。Loader自身はModフォルダへの転送では更新できないため、不一致時は画面で案内して中止します。
@@ -39,15 +39,13 @@ Minecraft **1.20.1 / Fabric / Java 17** 向けの、サーバー指定Mod構成�
 ```json
 {
   "enabled": true,
-  "bindAddress": "0.0.0.0",
-  "port": 25566,
   "sourceDirectory": "mods",
   "syncAllFiles": false,
   "syncSelectedFiles": true,
   "accessToken": "",
   "maxBytesPerSecond": 0,
   "files": {
-    "fabric-mod-sync-1.0.0.jar": true,
+    "fabric-mod-sync-1.1.0.jar": true,
     "fabric-api-0.92.12+1.20.1.jar": true,
     "example-mod.jar": true,
     "server-only-tool.jar": false
@@ -58,8 +56,6 @@ Minecraft **1.20.1 / Fabric / Java 17** 向けの、サーバー指定Mod構成�
 | 設定 | 動作 |
 |---|---|
 | `enabled` | 同期サービスの配布を有効／無効にします。無効時も問い合わせには無効であることを返します。 |
-| `bindAddress` | 待ち受けアドレス。ローカル限定なら `127.0.0.1`。 |
-| `port` | 同期用HTTPポート。初期値25566。 |
 | `sourceDirectory` | 配布元。サーバーディレクトリ内の相対パスを指定します。初期値 `mods`。 |
 | `syncAllFiles` | `true` で配布元の全JARを同期。個別のfalseより優先されます。 |
 | `syncSelectedFiles` | `syncAllFiles=false` のとき、`files` でtrueになっているJARだけを配布します。 |
@@ -71,7 +67,7 @@ Minecraft **1.20.1 / Fabric / Java 17** 向けの、サーバー指定Mod構成�
 
 **選択同期でも完全同期です。** 選ばれたファイル集合が正解になり、クライアントにあるそれ以外のJARは退避します。例えばサーバー専用ツールをfalseにした場合、クライアント上の同名ファイルも残しません。クライアント専用の描画Modなどを残したい場合は、そのModも配布構成に含めてください。
 
-一覧・選択設定は起動時と一覧問い合わせ時に再読込します。待ち受けアドレスとポートを変更した場合はサーバー再起動が必要です。配布元を変える場合は、ファイル取得中のクライアントがいない状態で変更してください。
+一覧・選択設定は起動時と一覧問い合わせ時に再読込します。待ち受けアドレスとポートはMinecraftの `server.properties` の設定を共有します。変更した場合はサーバー再起動が必要です。旧版の同期設定にある `bindAddress` と `port` は使用しません。配布元を変える場合は、ファイル取得中のクライアントがいない状態で変更してください。
 
 専用サーバー用のMod構成とクライアント配布用の構成を分ける場合は、例えばサーバー直下に `client-mods` を作ってクライアントに必要なJAR一式を置き、`sourceDirectory` を `client-mods` にします。そのフォルダにも同期ModとFabric APIを含めます。各Modの依存関係とMinecraft対応バージョンは管理者が正しい構成を用意してください。
 
@@ -82,23 +78,23 @@ Minecraft **1.20.1 / Fabric / Java 17** 向けの、サーバー指定Mod構成�
 ```json
 {
   "enabled": false,
-  "server": "localhost:25566",
+  "server": "localhost:25565",
   "accessToken": ""
 }
 ```
 
-`server` は `example.com:25566`、`127.0.0.1:25566`、`[::1]:25566` に対応します。TLS対応リバースプロキシを使う場合は `https://example.com:443` のように指定できます。HTTPサーバー自身のTLS終端機能はありません。リダイレクトは追従しません。
+`server` は `example.com:25565`、`127.0.0.1:25565`、`[::1]:25565` に対応します。実際のMinecraftポートを指定してください。直接接続ではHTTPとMinecraft通信が同じTCPポートを共有します。Minecraft専用プロキシはHTTPを通さないことがあるため、直接接続または両形式を通す経路が必要です。SRVレコードの自動検索は行いません。
 
-Modは実行コードです。自分で信頼できる同期先を設定してください。MD5・SHA-256は内容の一致を検証するもので、配布者の認証を行うものではありません。インターネット越しの運用はHTTPSとアクセストークンを推奨します。
+Modは実行コードです。自分で信頼できる同期先を設定してください。MD5・SHA-256は内容の一致を検証するもので、配布者の認証を行うものではありません。直接提供するHTTPは平文で、Minecraftのログイン暗号化は同期接続に適用されません。必要に応じてアクセストークンと保護されたネットワーク経路を利用してください。クライアントのHTTPS指定は利用可能ですが、Mod自身にTLS終端機能はありません。
 
 ## 起動前の補助機能
 
 FabricはModの依存関係を、Minecraftの画面を作る前に検証します。依存Mod不足や致命的な競合で起動が止まる場合、通常のModだけでは確認画面を表示できません。
 
-この場合に備え、**任意で使う** `fabric-mod-sync-1.0.0-helper.jar` に起動前同期用のJavaエージェントを含めています。このファイルは `mods` の外に置き、ランチャーのJava引数に次の形式で追記します。
+この場合に備え、**任意で使う** `fabric-mod-sync-1.1.0-helper.jar` に起動前同期用のJavaエージェントを含めています。このファイルは `mods` の外に置き、ランチャーのJava引数に次の形式で追記します。
 
 ```text
-"-javaagent:C:\MinecraftTools\fabric-mod-sync-1.0.0-helper.jar=C:\Minecraft\Client"
+"-javaagent:C:\MinecraftTools\fabric-mod-sync-1.1.0-helper.jar=C:\Minecraft\Client"
 ```
 
 右側は実際のゲームディレクトリに置き換えてください。通常のMod JARとクライアント設定も導入しておきます。エージェントはMod解決より前に同じサーバーへ問い合わせ、必要なら確認画面と進捗を表示します。この画面はMinecraft起動前なので **Windowsの通常のダイアログ** です。入れ替え後、そのまま新しい構成でMinecraftを起動できるため再起動は不要です。エージェントで確認済みの起動では、Mod側の起動時問い合わせを重ねて実行しません。
@@ -128,7 +124,7 @@ Java 17を用意し、プロジェクト内で実行します。
 .\gradlew.bat build
 ```
 
-生成物は `build/libs/fabric-mod-sync-1.0.0.jar`。`-sources.jar` はソース、`-helper.jar` は補助プログラムです。補助プログラムは通常Modの中にも埋め込まれているため、通常運用で別途配る必要はありません。
+生成物は `build/libs/fabric-mod-sync-1.1.0.jar`。`-sources.jar` はソース、`-helper.jar` は補助プログラムです。補助プログラムは通常Modの中にも埋め込まれているため、通常運用で別途配る必要はありません。
 
 ```powershell
 .\gradlew.bat test
@@ -136,18 +132,24 @@ Java 17を用意し、プロジェクト内で実行します。
 
 自動試験では、差分のみの転送、MD5照合、同名別内容・旧版の更新、余分なModの退避、選択設定、自動一覧登録、無効化、認証、破損検出、転送中の構成変更、キャンセル、ローカル変更検出、記録からの復旧、パス検証、終了待ちと実際の子プロセス再起動を確認します。
 
-専用サーバーとは別に配布サービスだけを動かす場合は次のコマンドも利用できます。指定フォルダをサーバールートとし、同じ設定と配布フォルダを利用します。この補助コマンドのLoader表記は0.19.5固定なので、他のLoader版の運用は専用サーバー内のModを利用してください。
+開発・検証用に、Minecraftを起動せずHTTP配布だけを行う補助コマンドも利用できます。指定フォルダの `server.properties` のアドレス・ポートを使うため、同じアドレスでMinecraftが動いている間は実行できません。通常のポート共有運用では使用しません。この補助コマンドのLoader表記は0.19.5固定です。
 
 ```powershell
-java -jar fabric-mod-sync-1.0.0-helper.jar serve C:\MinecraftServer
+java -jar fabric-mod-sync-1.1.0-helper.jar serve C:\MinecraftServer
 ```
 
 開発用サーバーを実行する場合は、`run/server/eula.txt` を用意して `gradlew.bat runServer` を実行します。`MODSYNC_SERVER_RUN_DIR` 環境変数で確認用サーバーディレクトリを指定できます。
 
 ## 参照
 
+詳細な動作フロー、同じポートでの判別方式、HTTP要求・応答、JSONの各項目、認証、revision計算、制限事項は [PROTOCOL-ja.md](PROTOCOL-ja.md) を参照してください。
+
 - [Fabric 1.20 / 1.20.1](https://fabricmc.net/2023/05/25/120.html)
 - [Fabric開発環境とJavaバージョン](https://wiki.fabricmc.net/tutorial:setup)
 - [Minecraft 1.20.1 Yarn API](https://maven.fabricmc.net/docs/yarn-1.20.1+build.10/)
 
 このプロジェクトのコードはMITライセンスです。Gsonを同梱する補助JARにはGsonのライセンス情報も含まれます。他のModの配布条件は各Modの条件を確認してください。
+
+## 1.0.0からの変更
+
+1.1.0ではゲームと同期を同じTCPポートで扱います。クライアントで以前保存した同期専用ポートは、ゲームの接続先ポートへ変更してください。サーバーでは旧JARを外して新版に入れ替えます。APIのURLとプロトコル番号1は維持しています。
