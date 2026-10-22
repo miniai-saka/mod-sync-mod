@@ -11,6 +11,7 @@ Minecraft **1.20.1 / Fabric / Java 17** 用のModです。サーバーが指定�
 </table>
 
 
+
 ## ダウンロード
 
 | バージョン | 主な仕様 |
@@ -18,7 +19,7 @@ Minecraft **1.20.1 / Fabric / Java 17** 用のModです。サーバーが指定�
 | [1.1.0](https://github.com/miniai-saka/mod-sync-mod/releases/tag/v1.1.0) | 最新版。ゲームと同期で同じTCPポートを使用。 |
 | [1.0.0](https://github.com/miniai-saka/mod-sync-mod/releases/tag/v1.0.0) | 初回リリース。同期用ポートは既定で25566。 |
 
-Releasesの `fabric-mod-sync-1.1.0.jar` をクライアントと専用サーバーの両方に入れます。Fabric APIも必要です。配布ZIPには設定例、説明書、任意で使う起動前ヘルパー、ソースを含めています。MD5・SHA-256一覧も各リリースに添付しています。
+Releasesの `fabric-mod-sync.jar` をクライアントと専用サーバーの両方に入れます。Fabric APIも必要です。配布ZIPには設定例、説明書、任意で使う起動前ヘルパー、ソースを含めています。MD5・SHA-256一覧も各リリースに添付しています。
 
 Minecraftと同期通信は同じTCPポートを使います。既定は25565です。
 
@@ -39,7 +40,7 @@ Minecraftと同期通信は同じTCPポートを使います。既定は25565で
 - [動作確認結果](verification-report.md)
 - [変更履歴](CHANGELOG.md)
 
-Fabric Loaderはクライアントとサーバーで同一バージョンを使用してください。Java、Minecraft本体、Loader、設定ファイルやワールドは同期対象に含みません。通常の確認画面はタイトル画面到達後に表示します。依存関係の不備でそこまで起動できない場合に備え、任意の起動前エージェントも付属します。
+Fabric Loaderはクライアントとサーバーで同一バージョンを使用してください。Java、Minecraft本体、Loader、設定ファイルやワールドは同期対象に含みません。通常の確認画面はタイトル画面到達後に表示します。依存関係の不備でそこまで起動できない場合に備え、任意の起動前エージェントも付属しています。
 
 ## ビルド
 
@@ -53,6 +54,5 @@ Java 17で実行します。
 
 ## ライセンス
 
-[MIT](LICENSE)。同梱ライブラリのライセンスは [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt) を参照してください。配布パッケージにはMinecraft本体や第三者のMod一式を含めていません。
+[MIT](LICENSE)。同梱ライブラリのライセンスは [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt) を参照してください。
 
-作者・著作権者: `miniai-saka`。Javaパッケージ: `io.github.miniai_saka.modsync`（GitHub名のハイフンはJavaの識別子に合わせてアンダースコアにしています）。
