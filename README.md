@@ -1,4 +1,4 @@
-# Fabric Mod Sync 1.1.0
+# Fabric Mod Sync
 
 Minecraft **1.20.1 / Fabric / Java 17** 用のModです。サーバーが指定するMod構成を起動時に確認し、ユーザーの承諾後に差分のあるJARだけをダウンロードします。MD5・SHA-256照合、旧版・余分なModのバックアップ、完全同期、自動再起動に対応します。
 
