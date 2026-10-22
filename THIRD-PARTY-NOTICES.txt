@@ -1,0 +1,8 @@
+Fabric Mod Sync's embedded standalone helper includes Gson 2.10.1.
+Gson: Copyright 2008 Google Inc. Licensed under the Apache License, Version 2.0.
+Source: https://github.com/google/gson/tree/gson-parent-2.10.1
+The full license text is in GSON-LICENSE.txt.
+
+Minecraft, Fabric Loader, Fabric API and JNA are runtime/development dependencies;
+they are not redistributed as separate libraries in the Mod JAR.
+The standalone helper includes only the project's core classes and Gson.

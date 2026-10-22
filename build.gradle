@@ -1,0 +1,79 @@
+plugins {
+    id 'fabric-loom' version '1.6.12'
+    id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+base { archivesName = project.archives_base_name }
+repositories { mavenCentral() }
+configurations { helperLibraries }
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+    helperLibraries 'com.google.code.gson:gson:2.10.1'
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'com.google.code.gson:gson:2.10.1'
+    testImplementation 'net.java.dev.jna:jna:5.12.1'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+loom {
+    splitEnvironmentSourceSets()
+    runs { server { runDir System.getenv('MODSYNC_SERVER_RUN_DIR') ?: 'run/server' } }
+    mods {
+        'fabric_mod_sync' {
+            sourceSet sourceSets.main
+            sourceSet sourceSets.client
+        }
+    }
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') { expand 'version': project.version }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 17
+    options.encoding = 'UTF-8'
+}
+java { withSourcesJar() }
+sourceSets.test.compileClasspath += sourceSets.client.output
+sourceSets.test.runtimeClasspath += sourceSets.client.output
+test {
+    useJUnitPlatform()
+    jvmArgs '-Dfile.encoding=UTF-8'
+    dependsOn 'helperJar'
+    systemProperty 'modsync.helper', layout.buildDirectory.file("libs/${project.archives_base_name}-${project.version}-helper.jar").get().asFile.absolutePath
+}
+
+tasks.register('helperJar', Jar) {
+    dependsOn tasks.compileJava
+    archiveClassifier = 'helper'
+    manifest { attributes 'Main-Class': 'io.github.miniai_saka.modsync.core.HelperMain', 'Premain-Class': 'io.github.miniai_saka.modsync.core.PrelaunchAgent' }
+    from(sourceSets.main.output.classesDirs) { include 'io/github/miniai_saka/modsync/core/**' }
+    from({ configurations.helperLibraries.collect { zipTree(it) } }) {
+        exclude 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA', 'module-info.class'
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from('GSON-LICENSE.txt', 'THIRD-PARTY-NOTICES.txt', 'LICENSE')
+}
+
+jar {
+    dependsOn tasks.helperJar
+    from(tasks.named('helperJar').flatMap { it.archiveFile }) { rename { 'modsync-helper.jar' } }
+    from('LICENSE')
+}
+
+tasks.register('sourceBundle', Zip) {
+    archiveFileName = "fabric-mod-sync-${project.version}-source.zip"
+    destinationDirectory = layout.buildDirectory.dir('distributions')
+    from(projectDir) {
+        exclude 'build/**', '.gradle/**', 'run/**', '.idea/**', '*.iml'
+    }
+}
