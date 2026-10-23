@@ -80,6 +80,8 @@ public final class SyncTransport {
                 } finally { guard.cancel(false); }
             }
             Hashes.verify(part, entry);
+            if (entry.metadata() != null && !entry.details().equals(ModDetails.read(part)))
+                throw new IOException("Modの用途・IDがサーバー一覧と一致しません: " + entry.name());
             try (var jar = new java.util.jar.JarFile(part.toFile())) {
                 if (jar.getJarEntry("fabric.mod.json") == null) throw new IOException("Fabric Modではありません: " + entry.name());
             }

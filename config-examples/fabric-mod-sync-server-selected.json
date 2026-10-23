@@ -3,10 +3,14 @@
   "sourceDirectory": "client-mods",
   "syncAllFiles": false,
   "syncSelectedFiles": true,
+  "newFilesDefaultSelected": false,
+  "excludeServerOnlyByDefault": true,
+  "hashCacheMode": "on_change",
+  "verifyHashesBeforeTransfer": false,
   "accessToken": "",
   "maxBytesPerSecond": 0,
   "files": {
-    "fabric-mod-sync-1.1.0.jar": true,
+    "fabric-mod-sync-1.2.0.jar": true,
     "fabric-api-0.92.12+1.20.1.jar": true,
     "example-mod.jar": true,
     "server-only-tool.jar": false

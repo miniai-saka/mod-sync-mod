@@ -30,7 +30,7 @@ public final class SyncSettingsScreen extends Screen {
         token.setMaxLength(256); token.setText(previousToken);
         token.setRenderTextProvider((text, first) -> Text.literal("•".repeat(text.length())).asOrderedText());
         addDrawableChild(token);
-        ButtonWidget check = addDrawableChild(ButtonWidget.builder(Text.literal("保存して今すぐ確認"), b -> { if (save()) ModSyncClient.check(parent, config); })
+        ButtonWidget check = addDrawableChild(ButtonWidget.builder(Text.literal("保存して今すぐ同期"), b -> { if (save()) ModSyncClient.check(this, config, true); })
                 .dimensions(left, top + 120, 300, 20).build());
         check.active = client.world == null;
         addDrawableChild(ButtonWidget.builder(Text.literal("保存して戻る"), b -> { if (save()) close(); }).dimensions(left, height - 30, 145, 20).build());

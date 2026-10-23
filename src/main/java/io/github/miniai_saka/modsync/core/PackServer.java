@@ -37,6 +37,7 @@ public final class PackServer implements AutoCloseable {
         try {
             PackService.Reply reply = service.prepare(x.getRequestMethod(), x.getRequestURI().getPath(),
                     x.getRequestHeaders().getFirst("X-ModSync-Revision"), x.getRequestHeaders().getFirst("Authorization"));
+            if (reply.discarded()) return;
             reply.headers().forEach((k,v) -> x.getResponseHeaders().set(k,v));
             x.sendResponseHeaders(reply.status(), reply.length());
             PackService.writeBody(reply, x.getResponseBody());

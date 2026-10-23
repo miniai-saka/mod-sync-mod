@@ -6,9 +6,12 @@ import java.util.*;
 
 public record Manifest(int protocol, boolean enabled, String minecraft, String loader, String revision, List<Entry> files) {
     public static final int PROTOCOL = 1;
-    public record Entry(String name, long size, String md5, String sha256) {
+    public record Entry(String name, long size, String md5, String sha256, ModDetails metadata, Boolean defaultSelected) {
+        public Entry(String name, long size, String md5, String sha256) { this(name, size, md5, sha256, null, null); }
         public Hashes.Value hash() { return new Hashes.Value(size, md5, sha256); }
         public static Entry of(String name, Hashes.Value h) { return new Entry(name, h.size(), h.md5(), h.sha256()); }
+        public ModDetails details() { return metadata == null ? ModDetails.UNKNOWN : metadata; }
+        public boolean selectedByDefault() { return defaultSelected == null ? !details().serverOnly() : defaultSelected; }
     }
     public static Manifest create(boolean enabled, String minecraft, String loader, List<Entry> files) {
         List<Entry> sorted = files.stream().sorted(Comparator.comparing(Entry::name)).toList();
@@ -31,6 +34,7 @@ public record Manifest(int protocol, boolean enabled, String minecraft, String l
                     || e.sha256() == null || !e.sha256().matches("[0-9a-f]{64}"))
                 throw new IOException("Invalid/duplicate file entry: " + e.name());
             total += e.size();
+            if (e.metadata() != null) e.metadata().validate();
         }
         if (total > 32L * 1024 * 1024 * 1024) throw new IOException("Pack exceeds 32 GiB");
         List<Entry> sorted = files.stream().sorted(Comparator.comparing(Entry::name)).toList();

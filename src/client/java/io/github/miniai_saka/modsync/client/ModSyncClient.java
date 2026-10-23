@@ -13,6 +13,7 @@ import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.text.Text;
 import org.slf4j.*;
 import java.nio.file.*;
+import java.util.*;
 import java.util.concurrent.*;
 
 public final class ModSyncClient implements ClientModInitializer {
@@ -25,9 +26,17 @@ public final class ModSyncClient implements ClientModInitializer {
     private boolean startupChecked;
     @Override public void onInitializeClient() {
         ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
-            if (screen instanceof OptionsScreen) Screens.getButtons(screen).add(
-                    ButtonWidget.builder(Text.literal("Mod同期設定"), b -> client.setScreen(new SyncSettingsScreen(screen)))
-                            .dimensions(width - 109, 5, 104, 20).build());
+            if (screen instanceof OptionsScreen) {
+                var buttons = Screens.getButtons(screen);
+                int left = width / 2 - 155;
+                int bottom = buttons.stream().filter(b -> Math.abs(b.getX() - left) <= 2 && b.getWidth() <= 150)
+                        .mapToInt(b -> b.getY() + b.getHeight()).max().orElse(height / 6 + 132);
+                int y = bottom + 4;
+                for (var button : buttons) if (button.getWidth() >= 200 && button.getY() >= bottom && button.getY() < y + 24)
+                    button.setY(Math.min(height - 24, y + 24));
+                buttons.add(ButtonWidget.builder(Text.literal("Mod同期設定"), b -> client.setScreen(new SyncSettingsScreen(screen)))
+                        .dimensions(left, y, 150, 20).build());
+            }
         });
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (!startupChecked && client.currentScreen instanceof TitleScreen) {
@@ -36,12 +45,15 @@ public final class ModSyncClient implements ClientModInitializer {
                 try {
                     ClientConfig config = ClientConfig.load(CONFIG);
                     if (!Files.exists(CONFIG)) Json.write(CONFIG, config);
-                    if (config.enabled) check(client.currentScreen, config);
+                    if (config.enabled) check(client.currentScreen, config, false);
                 } catch (Exception e) { LOG.error("Could not load mod sync config", e); }
             }
         });
     }
     public static void check(Screen parent, ClientConfig config) {
+        check(parent, config, true);
+    }
+    public static void check(Screen parent, ClientConfig config, boolean manual) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.world != null) {
             client.setScreen(new ResultScreen(parent, "タイトル画面から同期してください。ワールドを終了してから利用できます。")); return;
@@ -56,11 +68,16 @@ public final class ModSyncClient implements ClientModInitializer {
                 if (manifest.enabled() && !loader.equals(manifest.loader()))
                     throw new java.io.IOException("Fabric Loaderのバージョンが異なります。サーバー: " + manifest.loader() + " / クライアント: " + loader + "。ランチャーで同じバージョンに変更してください。");
                 SyncPlan plan = SyncPlan.create(manifest, Inventory.scan(GAME.resolve("mods")));
+                SelectionHistory history = SelectionHistory.load(SelectionHistory.path(GAME));
+                SelectionHistory.State remembered = history.server(config);
+                SyncSelection selection = new SyncSelection(plan, ModDetails.scan(GAME.resolve("mods")), remembered);
+                boolean hasSelectedChanges = selection.plan().changed();
                 client.execute(() -> {
                     if (work.cancelled.get() || client.currentScreen != work) return;
-                    if (!manifest.enabled()) client.setScreen(new ResultScreen(parent, "サーバー側で同期が無効になっています。"));
-                    else if (!plan.changed()) client.setScreen(parent);
-                    else client.setScreen(new SyncPromptScreen(parent, config, transport, plan));
+                    if (!manifest.enabled()) client.setScreen(manual ? new ResultScreen(parent, "サーバー側で同期が無効になっています。", true) : parent);
+                    else if (!plan.changed()) client.setScreen(manual ? new ResultScreen(parent, "同期が必要なファイルはありません。\nこのクライアントはサーバーの配布構成と一致しています。", true) : parent);
+                    else if (!manual && !hasSelectedChanges) client.setScreen(parent);
+                    else client.setScreen(new SyncPromptScreen(parent, config, transport, selection, history, remembered));
                 });
             } catch (Exception e) {
                 LOG.warn("Mod list check failed: {}", e.getMessage());

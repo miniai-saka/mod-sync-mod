@@ -23,7 +23,7 @@ class SyncIntegrationTest {
         Files.createDirectories(server.resolve("mods")); Files.createDirectories(game.resolve("mods"));
         mod(server, "sync.jar", "fabric_mod_sync", "bootstrap");
         Files.copy(server.resolve("mods/sync.jar"), game.resolve("mods/sync.jar"));
-        ServerConfig c = new ServerConfig();
+        ServerConfig c = new ServerConfig(); c.hashCacheMode = "on_change";
         Json.write(server.resolve("config/fabric-mod-sync-server.json"), c);
     }
     static Path mod(Path game, String name, String id, String content) throws IOException {
@@ -169,10 +169,10 @@ class SyncIntegrationTest {
         try (PackServer service = start()) {
             String revision = service.refresh().revision();
             HttpClient client = HttpClient.newHttpClient();
-            for (String file : List.of("missing.jar", "..%2Fserver.properties")) {
-                var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + service.port() + "/modsync/v1/file/" + file)).header("X-ModSync-Revision", revision).build();
-                assertNotEquals(200, client.send(request, HttpResponse.BodyHandlers.discarding()).statusCode());
-            }
+            var missing = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + service.port() + "/modsync/v1/file/missing.jar")).header("X-ModSync-Revision", revision).build();
+            assertNotEquals(200, client.send(missing, HttpResponse.BodyHandlers.discarding()).statusCode());
+            var traversal = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + service.port() + "/modsync/v1/file/..%2Fserver.properties")).header("X-ModSync-Revision", revision).build();
+            assertThrows(IOException.class, () -> client.send(traversal, HttpResponse.BodyHandlers.discarding()));
         }
     }
     @Test void endpointValidation() throws Exception {

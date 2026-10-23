@@ -50,7 +50,7 @@ public final class Transaction {
                     Files.copy(SafePaths.file(stage.resolve("downloads"), entry.name()), incoming, StandardCopyOption.REPLACE_EXISTING);
                     Json.move(incoming, SafePaths.file(root.resolve("mods"), entry.name()));
                 }
-                verifyExact(root, plan.manifest());
+                verifyTarget(root, plan);
                 journal.state = "COMMITTED";
                 Json.write(stage.resolve("journal.json"), journal);
                 Json.write(root.resolve(".modsync/last-result.json"), Map.of("success", true, "revision", plan.manifest().revision(), "backup", stage.toString()));
@@ -65,6 +65,10 @@ public final class Transaction {
         Map<String, Hashes.Value> expected = new TreeMap<>();
         for (var e : manifest.files()) expected.put(e.name(), e.hash());
         if (!Inventory.scan(game.resolve("mods")).equals(expected)) throw new IOException("Final complete mod inventory does not match server");
+    }
+    public static void verifyTarget(Path game, SyncPlan plan) throws IOException {
+        if (!Inventory.scan(game.resolve("mods")).equals(plan.expectedInventory()))
+            throw new IOException("Final mod inventory does not match the approved selection");
     }
     public static void recoverAll(Path game) throws IOException {
         Path transactions = game.resolve(".modsync/transactions");

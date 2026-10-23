@@ -3,6 +3,10 @@
   "sourceDirectory": "mods",
   "syncAllFiles": true,
   "syncSelectedFiles": true,
+  "newFilesDefaultSelected": true,
+  "excludeServerOnlyByDefault": true,
+  "hashCacheMode": "startup",
+  "verifyHashesBeforeTransfer": false,
   "accessToken": "",
   "maxBytesPerSecond": 0,
   "files": {}

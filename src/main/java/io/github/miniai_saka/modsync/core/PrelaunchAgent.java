@@ -20,18 +20,23 @@ public final class PrelaunchAgent {
             Manifest manifest = transport.manifest();
             String loader = loaderVersion();
             if (manifest.enabled() && !manifest.loader().equals(loader)) throw new java.io.IOException("Fabric Loaderをサーバーと一致させてください。必要なバージョン: " + manifest.loader());
-            SyncPlan plan = SyncPlan.create(manifest, Inventory.scan(game.resolve("mods")));
-            if (!manifest.enabled() || !plan.changed()) return;
+            SyncPlan candidates = SyncPlan.create(manifest, Inventory.scan(game.resolve("mods")));
+            if (!manifest.enabled() || !candidates.changed()) return;
+            SelectionHistory history = SelectionHistory.load(SelectionHistory.path(game));
+            SelectionHistory.State remembered = history.server(config);
+            SyncSelection selection = new SyncSelection(candidates, ModDetails.scan(game.resolve("mods")), remembered);
+            if (!selection.plan().changed()) return;
             if (GraphicsEnvironment.isHeadless()) throw new java.io.IOException("同期への同意画面を表示できません。");
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-            int[] answer = {-1};
-            SwingUtilities.invokeAndWait(() -> answer[0] = JOptionPane.showOptionDialog(null,
-                    "サーバー側のModとこのクライアントのModに不整合があります。同期しますか？\n" + config.server
-                            + "\n取得・更新: " + plan.downloads().size() + "個 / 退避: " + plan.removals().size() + "個\n"
-                            + "Minecraft起動前にファイルを同期します。",
-                    "Fabric Mod Sync — 起動前の確認", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE,
-                    null, new String[]{"同期して起動する", "しないでそのまま起動する"}, "同期して起動する"));
-            if (answer[0] != 0) return;
+            SyncPlan[] selected = new SyncPlan[1];
+            Exception[] selectionError = new Exception[1];
+            SwingUtilities.invokeAndWait(() -> {
+                try { selected[0] = PrelaunchSelectionDialog.choose(selection, config, history, remembered, game); }
+                catch (Exception e) { selectionError[0] = e; }
+            });
+            if (selectionError[0] != null) throw selectionError[0];
+            SyncPlan plan = selected[0];
+            if (plan == null) return;
             JDialog[] dialog = new JDialog[1]; JProgressBar[] bar = new JProgressBar[1]; JLabel[] label = new JLabel[1];
             AtomicBoolean cancel = new AtomicBoolean();
             SwingUtilities.invokeAndWait(() -> {

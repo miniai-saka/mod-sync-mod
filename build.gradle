@@ -80,6 +80,6 @@ tasks.register('sourceBundle', Zip) {
     archiveFileName = "fabric-mod-sync-${project.version}-source.zip"
     destinationDirectory = layout.buildDirectory.dir('distributions')
     from(projectDir) {
-        exclude 'build/**', '.gradle/**', 'run/**', '.idea/**', '*.iml'
+        exclude '.git/**', 'build/**', '.gradle/**', 'run/**', '.idea/**', '*.iml'
     }
 }

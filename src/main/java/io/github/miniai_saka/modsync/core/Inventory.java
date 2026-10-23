@@ -7,8 +7,13 @@ import java.util.*;
 public final class Inventory {
     private Inventory() {}
     public static SortedMap<String, Hashes.Value> scan(Path mods) throws IOException {
-        SafePaths.noLinks(mods);
         SortedMap<String, Hashes.Value> result = new TreeMap<>();
+        for (var entry : paths(mods).entrySet()) result.put(entry.getKey(), Hashes.of(entry.getValue()));
+        return result;
+    }
+    public static SortedMap<String, Path> paths(Path mods) throws IOException {
+        SafePaths.noLinks(mods);
+        SortedMap<String, Path> result = new TreeMap<>();
         if (!Files.exists(mods)) return result;
         Set<String> folded = new HashSet<>();
         try (var paths = Files.list(mods)) {
@@ -24,7 +29,7 @@ public final class Inventory {
                 if (!name.toLowerCase(Locale.ROOT).endsWith(".jar")) continue;
                 SafePaths.file(mods, name);
                 if (!folded.add(name.toLowerCase(Locale.ROOT))) throw new IOException("Case-colliding mod files");
-                result.put(name, Hashes.of(path));
+                result.put(name, path);
             }
         }
         return result;

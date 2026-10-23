@@ -8,6 +8,7 @@ import io.netty.handler.codec.ByteToMessageDecoder;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.timeout.*;
 import io.netty.util.concurrent.GlobalEventExecutor;
+import io.netty.util.ReferenceCountUtil;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -71,10 +72,26 @@ public final class PortSharing implements AutoCloseable {
             p.addLast("modsync-read-timeout", new ReadTimeoutHandler(requestTimeoutSeconds));
             p.addLast("modsync-write-timeout", new WriteTimeoutHandler(30));
             p.addLast("modsync-http-codec", new HttpServerCodec(4096, 8192, 8192));
+            p.addLast("modsync-api-only", new ApiRouteGate());
             p.addLast("modsync-http-request", new HttpObjectAggregator(0));
             p.addLast("modsync-http-handler", new RequestHandler());
             httpChannels.add(ctx.channel());
             p.remove(this);
+        }
+        @Override public void exceptionCaught(ChannelHandlerContext ctx, Throwable error) { ctx.close(); }
+    }
+    /** Reject unknown routes before aggregation can emit 100/413 responses. */
+    private static final class ApiRouteGate extends ChannelInboundHandlerAdapter {
+        private boolean allowed;
+        @Override public void channelRead(ChannelHandlerContext ctx, Object message) {
+            if (message instanceof HttpRequest request) {
+                try {
+                    allowed = request.decoderResult().isSuccess()
+                            && PackService.isSyncPath(new QueryStringDecoder(request.uri(), StandardCharsets.UTF_8).path());
+                } catch (RuntimeException e) { allowed = false; }
+            }
+            if (!allowed) { ReferenceCountUtil.release(message); ctx.close(); return; }
+            ctx.fireChannelRead(message);
         }
         @Override public void exceptionCaught(ChannelHandlerContext ctx, Throwable error) { ctx.close(); }
     }
@@ -114,6 +131,7 @@ public final class PortSharing implements AutoCloseable {
         headers(response, reply); ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
     }
     private static void stream(ChannelHandlerContext ctx, PackService.Reply reply) {
+        if (reply.discarded()) { ctx.close(); return; }
         try {
             HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.valueOf(reply.status()));
             headers(response, reply); ctx.writeAndFlush(response).sync();

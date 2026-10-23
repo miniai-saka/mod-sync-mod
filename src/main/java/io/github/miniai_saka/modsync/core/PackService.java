@@ -10,9 +10,12 @@ import java.util.*;
 public final class PackService {
     private final Path game, configPath;
     private final String minecraft, loader;
+    private final ServerCatalog catalog = new ServerCatalog();
     private volatile Snapshot snapshot;
-    private record Snapshot(Manifest manifest, Path source, String token, long rate) {}
+    private record Snapshot(Manifest manifest, Path source, String token, long rate, boolean verifyTransfer, byte[] json) {}
     public record Reply(int status, Map<String, String> headers, byte[] body, Path file, long length, long rate) {
+        public static Reply drop() { return new Reply(0, Map.of(), new byte[0], null, 0, 0); }
+        public boolean discarded() { return status == 0; }
         public static Reply text(int code, String text) {
             byte[] body = text.getBytes(StandardCharsets.UTF_8);
             return new Reply(code, Map.of("Content-Type", "text/plain; charset=utf-8", "Cache-Control", "no-store"), body, null, body.length, 0);
@@ -29,37 +32,57 @@ public final class PackService {
     public synchronized Manifest refresh() throws IOException {
         ServerConfig c = ServerConfig.load(configPath);
         Path source = c.source(game);
-        SortedMap<String, Hashes.Value> all = Inventory.scan(source);
+        SortedMap<String, Path> paths = Inventory.paths(source);
+        SortedMap<String, ServerCatalog.Jar> all = catalog.refresh(source, paths, c.hashCacheMode);
         boolean changed = !Files.exists(configPath);
-        for (String name : all.keySet()) if (!c.files.containsKey(name)) { c.files.put(name, true); changed = true; }
+        for (String name : paths.keySet()) if (!c.files.containsKey(name)) { c.files.put(name, c.newFilesDefaultSelected); changed = true; }
         if (changed) Json.write(configPath, c);
         boolean enabled = c.enabled && (c.syncAllFiles || c.syncSelectedFiles);
         List<Manifest.Entry> files = new ArrayList<>();
-        if (enabled) for (var e : all.entrySet()) if (c.selected(e.getKey())) files.add(Manifest.Entry.of(e.getKey(), e.getValue()));
-        Manifest m = Manifest.create(enabled && !files.isEmpty(), minecraft, loader, files);
-        m.validate(); snapshot = new Snapshot(m, source, c.accessToken, c.maxBytesPerSecond); return m;
+        if (enabled) for (var e : all.entrySet()) if (c.selected(e.getKey())) {
+            var hash = e.getValue().hash();
+            var details = e.getValue().details();
+            files.add(new Manifest.Entry(e.getKey(), hash.size(), hash.md5(), hash.sha256(), details,
+                    !(c.excludeServerOnlyByDefault && details.serverOnly())));
+        }
+        boolean active = enabled && !files.isEmpty();
+        Snapshot previous = snapshot;
+        Manifest m = previous != null && previous.manifest.enabled() == active && previous.manifest.files().equals(files)
+                ? previous.manifest : Manifest.create(active, minecraft, loader, files);
+        if (previous == null || previous.manifest != m) m.validate();
+        byte[] json = previous != null && previous.manifest == m ? previous.json : Json.GSON.toJson(m).getBytes(StandardCharsets.UTF_8);
+        snapshot = new Snapshot(m, source, c.accessToken, c.maxBytesPerSecond, c.verifyHashesBeforeTransfer, json);
+        return m;
     }
-    public Reply prepare(String method, String path, String revision, String authorization) throws IOException {
+    long hashComputations() { return catalog.computations(); }
+    public static boolean isSyncPath(String path) {
+        if ("/modsync/v1/manifest".equals(path)) return true;
+        if (path == null || !path.startsWith("/modsync/v1/file/")) return false;
+        try { SafePaths.fileName(path.substring("/modsync/v1/file/".length())); return true; }
+        catch (IOException e) { return false; }
+    }
+    public synchronized Reply prepare(String method, String path, String revision, String authorization) throws IOException {
+        if (!isSyncPath(path)) return Reply.drop();
         if (!"GET".equals(method)) return Reply.text(405, "GET required");
         if (!authorized(authorization, ServerConfig.load(configPath).accessToken)) return Reply.text(401, "Access token required");
+        refresh();
+        Snapshot current = snapshot;
+        if (!authorized(authorization, current.token)) return Reply.text(401, "Access token changed");
         if ("/modsync/v1/manifest".equals(path)) {
-            Manifest manifest = refresh();
-            if (!authorized(authorization, snapshot.token)) return Reply.text(401, "Access token changed");
-            byte[] body = Json.GSON.toJson(manifest).getBytes(StandardCharsets.UTF_8);
-            return new Reply(200, Map.of("Content-Type", "application/json; charset=utf-8", "Cache-Control", "no-store"), body, null, body.length, 0);
+            return new Reply(200, Map.of("Content-Type", "application/json; charset=utf-8", "Cache-Control", "no-store"), current.json, null, current.json.length, 0);
         }
         String prefix = "/modsync/v1/file/";
         if (!path.startsWith(prefix)) return Reply.text(404, "Not found");
         String name;
         try { name = SafePaths.fileName(path.substring(prefix.length())); }
         catch (IOException e) { return Reply.text(400, "Invalid file name"); }
-        Snapshot current = snapshot;
         if (!Objects.equals(current.manifest.revision(), revision)) return Reply.text(409, "Server mod list changed; check again");
         Manifest.Entry entry = current.manifest.files().stream().filter(e -> e.name().equals(name)).findFirst().orElse(null);
         if (!current.manifest.enabled() || entry == null) return Reply.text(404, "Not selected");
         Path file = SafePaths.file(current.source, name);
-        try { Hashes.verify(file, entry); }
-        catch (IOException e) { return Reply.text(409, "File changed; refresh the mod list"); }
+        if (!catalog.unchanged(name, file)) return Reply.text(409, "File changed; restart the server or use hashCacheMode=on_change");
+        if (current.verifyTransfer && !catalog.hash(file).equals(entry.hash()))
+            return Reply.text(409, "File hash changed; refresh the server cache");
         return new Reply(200, Map.of("Content-Type", "application/java-archive", "Cache-Control", "no-store", "ETag", "\"" + entry.sha256() + "\""),
                 null, file, entry.size(), current.rate);
     }

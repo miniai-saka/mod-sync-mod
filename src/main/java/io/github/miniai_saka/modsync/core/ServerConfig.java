@@ -9,13 +9,22 @@ public final class ServerConfig {
     public String sourceDirectory = "mods";
     public boolean syncAllFiles = true;
     public boolean syncSelectedFiles = true;
+    public boolean newFilesDefaultSelected = true;
+    public boolean excludeServerOnlyByDefault = true;
+    public String hashCacheMode = "startup";
+    public boolean verifyHashesBeforeTransfer = false;
     public String accessToken = "";
     public long maxBytesPerSecond = 0;
     public Map<String, Boolean> files = new TreeMap<>();
     public static ServerConfig load(Path path) throws IOException {
         ServerConfig c = Files.exists(path) ? Json.read(path, ServerConfig.class) : new ServerConfig();
-        if (c.sourceDirectory == null || c.files == null || c.accessToken == null || c.maxBytesPerSecond < 0)
+        if (c.sourceDirectory == null || c.files == null || c.files.size() > 4096 || c.accessToken == null || c.maxBytesPerSecond < 0
+                || c.hashCacheMode == null || !Set.of("startup", "on_change", "disabled").contains(c.hashCacheMode))
             throw new IOException("Invalid server config");
+        for (var entry : c.files.entrySet()) {
+            SafePaths.fileName(entry.getKey());
+            if (entry.getValue() == null) throw new IOException("Invalid file selection");
+        }
         return c;
     }
     public Path source(Path game) throws IOException {

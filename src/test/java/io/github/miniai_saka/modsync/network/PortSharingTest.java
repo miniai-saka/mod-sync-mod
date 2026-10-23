@@ -32,6 +32,8 @@ class PortSharingTest {
         server = Files.createDirectories(root.resolve("server/mods")).getParent();
         game = Files.createDirectories(root.resolve("client/mods")).getParent();
         writeMod("sync.jar", "fabric_mod_sync", 4096);
+        ServerConfig config = new ServerConfig(); config.hashCacheMode = "on_change";
+        Json.write(server.resolve("config/fabric-mod-sync-server.json"), config);
         service = new PackService(server, "1.20.1", "0.19.5");
         sharing = new PortSharing(() -> service, 1);
         boss = new NioEventLoopGroup(1); io = new NioEventLoopGroup(1);
@@ -104,7 +106,11 @@ class PortSharingTest {
         Json.write(server.resolve("config/fabric-mod-sync-server.json"), config);
         assertEquals(401, request("GET", "/modsync/v1/manifest", "").statusCode());
         assertEquals(200, request("GET", "/modsync/v1/manifest", "secret").statusCode());
-        assertEquals(404, request("GET", "/unknown", "secret").statusCode());
+        try (Socket socket = new Socket("127.0.0.1", port)) {
+            socket.setSoTimeout(2000);
+            socket.getOutputStream().write("GET /unknown HTTP/1.1\r\nHost: localhost\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
+            assertEquals(0, socket.getInputStream().readAllBytes().length);
+        }
         assertEquals(405, request("POST", "/modsync/v1/manifest", "secret").statusCode());
     }
     @Test void slowDownloadDoesNotBlockNormalTraffic() throws Exception {
@@ -127,6 +133,22 @@ class PortSharingTest {
     @Test void incompleteHttpPrefixRetainsOriginalIdleTimeout() throws Exception {
         try (Socket socket = new Socket("127.0.0.1", port)) {
             socket.setSoTimeout(4000); socket.getOutputStream().write('G'); assertEquals(-1, socket.getInputStream().read());
+        }
+    }
+    @Test void unknownRoutesIncludingRootNeverSendHttpStatusHeadersOrBody() throws Exception {
+        for (String path : List.of("/", "/favicon.ico", "/robots.txt", "/modsync/v1/unknown", "/modsync/v1/manifest/")) {
+            try (Socket socket = new Socket("127.0.0.1", port)) {
+                socket.setSoTimeout(2000);
+                socket.getOutputStream().write(("GET " + path + " HTTP/1.1\r\nHost: localhost\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+                assertEquals(-1, socket.getInputStream().read(), path);
+            }
+        }
+    }
+    @Test void unknownRouteWithBodyDoesNotReceiveAutomaticContinueOrEntityTooLarge() throws Exception {
+        try (Socket socket = new Socket("127.0.0.1", port)) {
+            socket.setSoTimeout(2000);
+            socket.getOutputStream().write("POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1000\r\nExpect: 100-continue\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
+            assertEquals(-1, socket.getInputStream().read());
         }
     }
 }
