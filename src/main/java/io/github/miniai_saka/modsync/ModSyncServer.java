@@ -1,6 +1,7 @@
 package io.github.miniai_saka.modsync;
 
 import io.github.miniai_saka.modsync.core.PackService;
+import io.github.miniai_saka.modsync.core.SyncAudit;
 import io.github.miniai_saka.modsync.network.PortSharing;
 import io.netty.channel.Channel;
 import net.fabricmc.api.DedicatedServerModInitializer;
@@ -20,7 +21,8 @@ public final class ModSyncServer implements DedicatedServerModInitializer {
             try {
                 FabricLoader loader = FabricLoader.getInstance();
                 service = new PackService(loader.getGameDir(), "1.20.1",
-                        loader.getModContainer("fabricloader").orElseThrow().getMetadata().getVersion().getFriendlyString());
+                        loader.getModContainer("fabricloader").orElseThrow().getMetadata().getVersion().getFriendlyString(),
+                        (level, message) -> { if (level == SyncAudit.Level.WARN) LOG.warn(message); else LOG.info(message); });
                 LOG.info("Mod synchronization shares Minecraft TCP port {} (HTTP /modsync/v1/)", server.getServerPort());
             } catch (Exception e) { LOG.error("Mod synchronization service failed to start; check config and port", e); }
         });

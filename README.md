@@ -48,6 +48,14 @@ Minecraftと同期通信は同じTCPポートを使います。既定は25565で
 
 同期API以外のHTTPアクセスは、ステータスコードや本文を返さず接続を閉じます。通常のMinecraft通信は同じポートで使うことができます。
 
+## IP制限とログ
+
+サーバー設定の `allowedIps` で同期を許可するIP、`deniedIps` で拒否するIPを指定できます。IPv4・IPv6・CIDRに対応し、重なる場合は拒否を優先します。許可リストが空なら、拒否したIP以外を許可します。通常のMinecraft接続はこの制限の対象外です。
+
+`logMode` は `off`（出力なし）、`normal`（通常）、`detailed`（詳細）から選べます。拒否・成功・JAR転送量の表示は `logRejectedRequests`・`logSuccessfulRequests`・`logTransfers` で個別に切り替えられます。出力先はMinecraft標準のコンソールとログです。設定変更に再起動は不要です。
+
+指定方法とログの例は [IP制限・ログの設定](README-ja.md#ip制限とログ) を参照してください。
+
 ## 説明・設定
 
 - [導入・設定・復旧・制限](README-ja.md)

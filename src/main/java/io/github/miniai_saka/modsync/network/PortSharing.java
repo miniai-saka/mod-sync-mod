@@ -1,6 +1,7 @@
 package io.github.miniai_saka.modsync.network;
 
 import io.github.miniai_saka.modsync.core.PackService;
+import io.github.miniai_saka.modsync.core.SyncAudit;
 import io.netty.buffer.*;
 import io.netty.channel.*;
 import io.netty.channel.group.*;
@@ -10,6 +11,7 @@ import io.netty.handler.timeout.*;
 import io.netty.util.concurrent.GlobalEventExecutor;
 import io.netty.util.ReferenceCountUtil;
 import java.io.*;
+import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
@@ -73,16 +75,15 @@ public final class PortSharing implements AutoCloseable {
             p.addLast("modsync-write-timeout", new WriteTimeoutHandler(30));
             p.addLast("modsync-http-codec", new HttpServerCodec(4096, 8192, 8192));
             p.addLast("modsync-api-only", new ApiRouteGate());
-            p.addLast("modsync-http-request", new HttpObjectAggregator(0));
             p.addLast("modsync-http-handler", new RequestHandler());
             httpChannels.add(ctx.channel());
             p.remove(this);
         }
         @Override public void exceptionCaught(ChannelHandlerContext ctx, Throwable error) { ctx.close(); }
     }
-    /** Reject unknown routes before aggregation can emit 100/413 responses. */
-    private static final class ApiRouteGate extends ChannelInboundHandlerAdapter {
-        private boolean allowed;
+    /** Unknown routes remain silent; their optional logs are processed away from the I/O thread. */
+    private final class ApiRouteGate extends ChannelInboundHandlerAdapter {
+        private boolean allowed, logged;
         @Override public void channelRead(ChannelHandlerContext ctx, Object message) {
             if (message instanceof HttpRequest request) {
                 try {
@@ -90,14 +91,29 @@ public final class PortSharing implements AutoCloseable {
                             && PackService.isSyncPath(new QueryStringDecoder(request.uri(), StandardCharsets.UTF_8).path());
                 } catch (RuntimeException e) { allowed = false; }
             }
-            if (!allowed) { ReferenceCountUtil.release(message); ctx.close(); return; }
+            if (!allowed) {
+                if (!logged) {
+                    logged = true;
+                    String method = message instanceof HttpRequest request ? request.method().name() : "unknown";
+                    InetAddress peer = peer(ctx);
+                    try { workers.execute(() -> {
+                        PackService current = service.get();
+                        if (current != null) current.openRequest(method, "/", null, null, peer, false).finish(0, false);
+                    }); } catch (RejectedExecutionException ignored) {}
+                }
+                ReferenceCountUtil.release(message); ctx.close(); return;
+            }
             ctx.fireChannelRead(message);
         }
         @Override public void exceptionCaught(ChannelHandlerContext ctx, Throwable error) { ctx.close(); }
     }
-    private final class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
+    private static InetAddress peer(ChannelHandlerContext ctx) {
+        return ctx.channel().remoteAddress() instanceof InetSocketAddress address ? address.getAddress() : null;
+    }
+    private final class RequestHandler extends SimpleChannelInboundHandler<HttpObject> {
         private boolean accepted;
-        @Override protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest request) {
+        @Override protected void channelRead0(ChannelHandlerContext ctx, HttpObject message) {
+            if (!(message instanceof HttpRequest request)) return;
             if (accepted) { ctx.close(); return; }
             accepted = true;
             // A complete GET has no more inbound bytes. Do not time out a healthy long download for lack of reads.
@@ -107,14 +123,20 @@ public final class PortSharing implements AutoCloseable {
             try { path = new QueryStringDecoder(request.uri(), StandardCharsets.UTF_8).path(); }
             catch (RuntimeException e) { immediate(ctx, PackService.Reply.text(400, "Invalid path encoding")); return; }
             String method = request.method().name(), revision = request.headers().get("X-ModSync-Revision"), auth = request.headers().get("Authorization");
+            final boolean hasBody;
+            try { hasBody = HttpUtil.isTransferEncodingChunked(request) || HttpUtil.getContentLength(request, 0) != 0; }
+            catch (RuntimeException e) { immediate(ctx, PackService.Reply.text(400, "Invalid request length")); return; }
+            InetAddress peer = peer(ctx);
             try {
                 workers.execute(() -> {
                     PackService.Reply reply;
+                    SyncAudit.Response response = null;
                     try {
                         PackService current = service.get();
-                        reply = current == null ? PackService.Reply.text(503, "Minecraft server is starting") : current.prepare(method, path, revision, auth);
+                        if (current == null) reply = PackService.Reply.text(503, "Minecraft server is starting");
+                        else { response = current.openRequest(method, path, revision, auth, peer, hasBody); reply = response.reply(); }
                     } catch (Exception e) { reply = PackService.Reply.text(500, "Sync request failed"); }
-                    stream(ctx, reply);
+                    stream(ctx, reply, response);
                 });
             } catch (RejectedExecutionException e) { immediate(ctx, PackService.Reply.text(503, "Sync service is busy")); }
         }
@@ -130,9 +152,10 @@ public final class PortSharing implements AutoCloseable {
         FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.valueOf(reply.status()), Unpooled.wrappedBuffer(reply.body()));
         headers(response, reply); ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
     }
-    private static void stream(ChannelHandlerContext ctx, PackService.Reply reply) {
-        if (reply.discarded()) { ctx.close(); return; }
+    private static void stream(ChannelHandlerContext ctx, PackService.Reply reply, SyncAudit.Response audit) {
+        long[] sent = {0}; boolean complete = false;
         try {
+            if (reply.discarded()) return;
             HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.valueOf(reply.status()));
             headers(response, reply); ctx.writeAndFlush(response).sync();
             PackService.writeBody(reply, new OutputStream() {
@@ -144,10 +167,13 @@ public final class PortSharing implements AutoCloseable {
                     try { future.sync(); }
                     catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new InterruptedIOException("Transfer interrupted"); }
                     catch (RuntimeException e) { throw new IOException("Transfer failed", e); }
+                    sent[0] += length;
                 }
             });
-            ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT).addListener(ChannelFutureListener.CLOSE);
-        } catch (Exception e) { ctx.close(); if (e instanceof InterruptedException) Thread.currentThread().interrupt(); }
+            ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT).sync();
+            complete = true;
+        } catch (Exception e) { if (e instanceof InterruptedException) Thread.currentThread().interrupt(); }
+        finally { if (audit != null) audit.finish(sent[0], complete); ctx.close(); }
     }
     @Override public void close() { httpChannels.close(); workers.shutdownNow(); }
 }

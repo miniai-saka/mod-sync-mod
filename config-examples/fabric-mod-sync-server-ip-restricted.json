@@ -1,0 +1,19 @@
+{
+  "enabled": true,
+  "sourceDirectory": "mods",
+  "syncAllFiles": true,
+  "syncSelectedFiles": true,
+  "newFilesDefaultSelected": true,
+  "excludeServerOnlyByDefault": true,
+  "hashCacheMode": "startup",
+  "verifyHashesBeforeTransfer": false,
+  "accessToken": "",
+  "maxBytesPerSecond": 0,
+  "allowedIps": ["192.0.2.0/24", "2001:db8::/32"],
+  "deniedIps": ["192.0.2.100", "2001:db8::100"],
+  "logMode": "detailed",
+  "logRejectedRequests": true,
+  "logSuccessfulRequests": true,
+  "logTransfers": true,
+  "files": {}
+}

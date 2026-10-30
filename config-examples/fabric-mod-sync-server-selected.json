@@ -9,8 +9,14 @@
   "verifyHashesBeforeTransfer": false,
   "accessToken": "",
   "maxBytesPerSecond": 0,
+  "allowedIps": [],
+  "deniedIps": [],
+  "logMode": "normal",
+  "logRejectedRequests": true,
+  "logSuccessfulRequests": true,
+  "logTransfers": true,
   "files": {
-    "fabric-mod-sync-1.2.0.jar": true,
+    "fabric-mod-sync-1.3.0.jar": true,
     "fabric-api-0.92.12+1.20.1.jar": true,
     "example-mod.jar": true,
     "server-only-tool.jar": false

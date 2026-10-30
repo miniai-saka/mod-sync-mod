@@ -1,10 +1,10 @@
-# Fabric Mod Sync 1.2.0
+# Fabric Mod Sync 1.3.0
 
 Minecraft **1.20.1 / Fabric / Java 17** 向けの、サーバー指定Mod構成への同期Modです。同じMod JARをクライアントと専用サーバーに入れます。Fabric APIも必要です。
 
 ## 導入
 
-1. クライアントとサーバーの `mods` に `fabric-mod-sync-1.2.0.jar` を入れます。
+1. クライアントとサーバーの `mods` に `fabric-mod-sync-1.3.0.jar` を入れます。
 2. 専用サーバーを起動します。`config/fabric-mod-sync-server.json` が作成され、Modファイル一覧も自動登録されます。
 3. 通常のMinecraft用TCPポートを公開します。同期通信も同じポートを使います。標準は **25565** で、同期専用ポートの開放は不要です。
 4. クライアントの「設定」の左列最下段にある **Mod同期設定** を開き、ゲームと同じ `example.com:25565` のように入力します。
@@ -54,8 +54,14 @@ Minecraft **1.20.1 / Fabric / Java 17** 向けの、サーバー指定Mod構成�
   "verifyHashesBeforeTransfer": false,
   "accessToken": "",
   "maxBytesPerSecond": 0,
+  "allowedIps": [],
+  "deniedIps": [],
+  "logMode": "normal",
+  "logRejectedRequests": true,
+  "logSuccessfulRequests": true,
+  "logTransfers": true,
   "files": {
-    "fabric-mod-sync-1.2.0.jar": true,
+    "fabric-mod-sync-1.3.0.jar": true,
     "fabric-api-0.92.12+1.20.1.jar": true,
     "example-mod.jar": true,
     "server-only-tool.jar": false
@@ -76,6 +82,12 @@ Minecraft **1.20.1 / Fabric / Java 17** 向けの、サーバー指定Mod構成�
 | `verifyHashesBeforeTransfer` | trueでファイル取得時に再計算します。既定はfalse。クライアントの転送後MD5・SHA-256照合は設定にかかわらず有効です。 |
 | `accessToken` | 空なら認証なし。指定した場合、クライアントにも同じトークンを設定します。 |
 | `maxBytesPerSecond` | 1ダウンロード当たりの転送速度上限。0は無制限。単位はバイト／秒。 |
+| `allowedIps` | 同期を許可するIP・CIDRの一覧。空なら拒否リスト以外を許可します。 |
+| `deniedIps` | 同期を拒否するIP・CIDRの一覧。許可リストより優先します。 |
+| `logMode` | `off`：同期要求のログを出さない、`normal`：通常、`detailed`：所要時間なども表示。既定はnormal。 |
+| `logRejectedRequests` | 拒否・失敗・API外URLへのアクセスを記録します。既定はtrue。 |
+| `logSuccessfulRequests` | 応答の送信が完了した要求を記録します。既定はtrue。 |
+| `logTransfers` | JAR転送の結果と送信済みバイト数を記録します。既定はtrue。 |
 
 `syncAllFiles=false` と `syncSelectedFiles=false` の組み合わせは同期無効です。有効な選択が0ファイルの場合も、誤って全Modを退避しないよう同期無効として扱います。
 
@@ -86,6 +98,43 @@ Minecraft **1.20.1 / Fabric / Java 17** 向けの、サーバー指定Mod構成�
 待ち受けはMinecraftの `server.properties` を共有します。アドレス・ポートの変更には再起動が必要です。`startup` での `sourceDirectory` 変更にも再起動が必要です。
 
 専用サーバー用のMod構成とクライアント配布用の構成を分ける場合は、例えばサーバー直下に `client-mods` を作ってクライアントに必要なJAR一式を置き、`sourceDirectory` を `client-mods` にします。そのフォルダにも同期ModとFabric APIを含めてください。各Modの依存関係とMinecraft対応バージョンは管理者が正しい構成を用意してください。
+
+## IP制限とログ
+
+設定場所はサーバーの `config/fabric-mod-sync-server.json` です。既存の設定に項目がなければ、IP制限なし・通常ログが初期値になります。
+
+例えば、指定したネットワークだけに同期を許可し、その中の特定IPを拒否する場合は次のように設定します。例示用のIPは実際の接続元に置き換えてください。
+
+```json
+{
+  "allowedIps": ["192.0.2.0/24", "2001:db8::/32"],
+  "deniedIps": ["192.0.2.100", "2001:db8::100"],
+  "logMode": "detailed",
+  "logRejectedRequests": true,
+  "logSuccessfulRequests": true,
+  "logTransfers": true
+}
+```
+
+- 許可リストが空なら、拒否リスト以外を許可します。両方が空ならIP制限はありません。
+- IPv4・IPv6の単一IPとCIDRを指定できます。ホスト名、ワイルドカード、IPv6の角括弧・スコープIDは使いません。
+- 拒否リストは許可リストより優先し、一覧取得とJAR取得の両方をHTTP 403で拒否します。Minecraft本体のログインやpingを制限する設定ではありません。
+- 接続元はTCP接続のIPで判定します。`X-Forwarded-For` などのヘッダーは参照しません。プロキシ経由の場合は、サーバーから見えるプロキシのIPが対象です。
+- 不正な設定は起動時にエラーとなります。稼働中の不正な設定では同期APIを500で止め、設定を修正すれば次の要求から再開します。
+
+拒否はWARN、成功はINFOとして `FabricModSync` ロガーからMinecraft標準ログへ出力します。`logMode=off` はこの要求ログを止めます。Modの起動案内や起動に失敗した場合のエラー、Minecraft本体・他Modのログは別です。
+
+`logSuccessfulRequests=false` でも `logTransfers=true` ならJAR転送のログは残ります。成功と転送量の両方を表示する場合も、同じ転送を重複して記録しません。`detailed` では所要時間と予定バイト数も表示します。
+
+```text
+Mod sync rejected ip=192.0.2.100 method=GET path=/modsync/v1/manifest status=403 reason=ip_denied elapsed_ms=1
+Mod sync success ip=192.0.2.20 method=GET path=/modsync/v1/file/example.jar status=200 bytes=1048576 expected_bytes=1048576 elapsed_ms=120
+Mod sync aborted ip=192.0.2.20 method=GET path=/modsync/v1/file/example.jar status=200 reason=transfer_incomplete bytes=65536 expected_bytes=1048576 elapsed_ms=1000
+```
+
+転送量はサーバーで書込みが成功したJAR本文のバイト数です。HTTPヘッダーや再送分は含まず、クライアントでの照合・導入完了を示す値ではありません。途中切断は `aborted` として扱います。トークン・要求のクエリ文字列は記録せず、API外のURLは `<outside-sync-api>` と表示します。API外への接続は、ログ設定にかかわらずHTTP応答を返さず閉じます。
+
+IP制限とログ設定は要求ごとに再読込します。転送中の接続は、その要求を受け付けた時点の設定で処理します。設定全体の例は [config-examples](config-examples/) を参照してください。
 
 ## クライアント設定
 
@@ -107,10 +156,10 @@ Modは実行コードです。自分で信頼できる同期先を設定して�
 
 FabricはModの依存関係を、Minecraftの画面を作る前に検証します。依存Mod不足や致命的な競合で起動が止まる場合、通常のModだけでは確認画面を表示できません。
 
-この場合に備え、任意で使う `fabric-mod-sync-1.2.0-helper.jar` に起動前同期用のJavaエージェントを含めています。このファイルは `mods` の外に置き、ランチャーのJava引数に次の形式で追記します。
+この場合に備え、任意で使う `fabric-mod-sync-1.3.0-helper.jar` に起動前同期用のJavaエージェントを含めています。このファイルは `mods` の外に置き、ランチャーのJava引数に次の形式で追記します。
 
 ```text
-"-javaagent:C:\MinecraftTools\fabric-mod-sync-1.2.0-helper.jar=C:\Minecraft\Client"
+"-javaagent:C:\MinecraftTools\fabric-mod-sync-1.3.0-helper.jar=C:\Minecraft\Client"
 ```
 
 右側は実際のゲームディレクトリに置き換えてください。通常のMod JARとクライアント設定も導入しておきます。エージェントはMod解決より前に同じサーバーへ問い合わせ、必要なら確認画面と進捗を表示します。この画面はMinecraft起動前なので **Windowsの通常のダイアログ** です。入れ替え後、そのまま新しい構成でMinecraftを起動できるため再起動は不要です。エージェントで確認済みの起動では、Mod側の起動時問い合わせを重ねて実行しません。
@@ -140,7 +189,7 @@ Java 17を用意し、プロジェクト内で実行します。
 .\gradlew.bat build
 ```
 
-生成物は `build/libs/fabric-mod-sync-1.2.0.jar`。`-sources.jar` はソース、`-helper.jar` は補助プログラムです。補助プログラムは通常Modの中にも埋め込まれているため、通常運用で別途配る必要はありません。
+生成物は `build/libs/fabric-mod-sync-1.3.0.jar`。`-sources.jar` はソース、`-helper.jar` は補助プログラムです。補助プログラムは通常Modの中にも埋め込まれているため、通常運用で別途配る必要はありません。
 
 ```powershell
 .\gradlew.bat test

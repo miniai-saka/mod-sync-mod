@@ -1,6 +1,7 @@
 package io.github.miniai_saka.modsync.core;
 
 import java.io.*;
+import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.security.MessageDigest;
@@ -11,6 +12,8 @@ public final class PackService {
     private final Path game, configPath;
     private final String minecraft, loader;
     private final ServerCatalog catalog = new ServerCatalog();
+    private final SyncAudit.Sink audit;
+    private volatile SyncAudit.Settings logSettings = SyncAudit.Settings.from(new ServerConfig());
     private volatile Snapshot snapshot;
     private record Snapshot(Manifest manifest, Path source, String token, long rate, boolean verifyTransfer, byte[] json) {}
     public record Reply(int status, Map<String, String> headers, byte[] body, Path file, long length, long rate) {
@@ -22,6 +25,10 @@ public final class PackService {
         }
     }
     public PackService(Path game, String minecraft, String loader) throws IOException {
+        this(game, minecraft, loader, SyncAudit.systemLogger());
+    }
+    public PackService(Path game, String minecraft, String loader, SyncAudit.Sink audit) throws IOException {
+        this.audit = Objects.requireNonNull(audit);
         this.game = game.toAbsolutePath().normalize();
         this.configPath = this.game.resolve("config/fabric-mod-sync-server.json");
         this.minecraft = minecraft; this.loader = loader;
@@ -30,7 +37,10 @@ public final class PackService {
         Json.write(configPath, ServerConfig.load(configPath));
     }
     public synchronized Manifest refresh() throws IOException {
-        ServerConfig c = ServerConfig.load(configPath);
+        return refresh(ServerConfig.load(configPath));
+    }
+    private Manifest refresh(ServerConfig c) throws IOException {
+        logSettings = SyncAudit.Settings.from(c);
         Path source = c.source(game);
         SortedMap<String, Path> paths = Inventory.paths(source);
         SortedMap<String, ServerCatalog.Jar> all = catalog.refresh(source, paths, c.hashCacheMode);
@@ -61,30 +71,50 @@ public final class PackService {
         try { SafePaths.fileName(path.substring("/modsync/v1/file/".length())); return true; }
         catch (IOException e) { return false; }
     }
-    public synchronized Reply prepare(String method, String path, String revision, String authorization) throws IOException {
-        if (!isSyncPath(path)) return Reply.drop();
-        if (!"GET".equals(method)) return Reply.text(405, "GET required");
-        if (!authorized(authorization, ServerConfig.load(configPath).accessToken)) return Reply.text(401, "Access token required");
-        refresh();
+    public Reply prepare(String method, String path, String revision, String authorization) throws IOException {
+        return openRequest(method, path, revision, authorization, null, false).reply();
+    }
+    public synchronized SyncAudit.Response openRequest(String method, String path, String revision, String authorization,
+                                                       InetAddress peer, boolean hasBody) {
+        long started = System.nanoTime();
+        String failure = "invalid_config";
+        Decision decision;
+        try {
+            ServerConfig c = ServerConfig.load(configPath);
+            logSettings = SyncAudit.Settings.from(c);
+            failure = "request_failed";
+            decision = decide(c, method, path, revision, authorization, peer, hasBody);
+        } catch (IOException | RuntimeException e) {
+            // Never fall back to unrestricted access or expose filesystem paths/config contents.
+            decision = new Decision(isSyncPath(path) ? Reply.text(500, "Sync request failed; check server config") : Reply.drop(), failure);
+        }
+        return new SyncAudit.Response(decision.reply, logSettings, audit, peer, method, path, decision.reason, started);
+    }
+    private record Decision(Reply reply, String reason) {}
+    private Decision decide(ServerConfig c, String method, String path, String revision, String authorization,
+                            InetAddress peer, boolean hasBody) throws IOException {
+        if (!isSyncPath(path)) return new Decision(Reply.drop(), "outside_sync_api");
+        String rejection = c.ipAccess().rejection(peer);
+        if (rejection != null) return new Decision(Reply.text(403, "IP address is not allowed"), rejection);
+        if (!authorized(authorization, c.accessToken)) return new Decision(Reply.text(401, "Access token required"), "token_required");
+        if (!"GET".equals(method)) return new Decision(Reply.text(405, "GET required"), "method_not_allowed");
+        if (hasBody) return new Decision(Reply.text(413, "Request body is not supported"), "body_not_supported");
+        refresh(c);
         Snapshot current = snapshot;
-        if (!authorized(authorization, current.token)) return Reply.text(401, "Access token changed");
         if ("/modsync/v1/manifest".equals(path)) {
-            return new Reply(200, Map.of("Content-Type", "application/json; charset=utf-8", "Cache-Control", "no-store"), current.json, null, current.json.length, 0);
+            return new Decision(new Reply(200, Map.of("Content-Type", "application/json; charset=utf-8", "Cache-Control", "no-store"), current.json, null, current.json.length, 0), "ok");
         }
         String prefix = "/modsync/v1/file/";
-        if (!path.startsWith(prefix)) return Reply.text(404, "Not found");
-        String name;
-        try { name = SafePaths.fileName(path.substring(prefix.length())); }
-        catch (IOException e) { return Reply.text(400, "Invalid file name"); }
-        if (!Objects.equals(current.manifest.revision(), revision)) return Reply.text(409, "Server mod list changed; check again");
+        String name = SafePaths.fileName(path.substring(prefix.length()));
+        if (!Objects.equals(current.manifest.revision(), revision)) return new Decision(Reply.text(409, "Server mod list changed; check again"), "revision_mismatch");
         Manifest.Entry entry = current.manifest.files().stream().filter(e -> e.name().equals(name)).findFirst().orElse(null);
-        if (!current.manifest.enabled() || entry == null) return Reply.text(404, "Not selected");
+        if (!current.manifest.enabled() || entry == null) return new Decision(Reply.text(404, "Not selected"), "file_not_selected");
         Path file = SafePaths.file(current.source, name);
-        if (!catalog.unchanged(name, file)) return Reply.text(409, "File changed; restart the server or use hashCacheMode=on_change");
+        if (!catalog.unchanged(name, file)) return new Decision(Reply.text(409, "File changed; restart the server or use hashCacheMode=on_change"), "file_changed");
         if (current.verifyTransfer && !catalog.hash(file).equals(entry.hash()))
-            return Reply.text(409, "File hash changed; refresh the server cache");
-        return new Reply(200, Map.of("Content-Type", "application/java-archive", "Cache-Control", "no-store", "ETag", "\"" + entry.sha256() + "\""),
-                null, file, entry.size(), current.rate);
+            return new Decision(Reply.text(409, "File hash changed; refresh the server cache"), "file_hash_changed");
+        return new Decision(new Reply(200, Map.of("Content-Type", "application/java-archive", "Cache-Control", "no-store", "ETag", "\"" + entry.sha256() + "\""),
+                null, file, entry.size(), current.rate), "ok");
     }
     private static boolean authorized(String provided, String token) {
         return token.isEmpty() || MessageDigest.isEqual(("Bearer " + token).getBytes(StandardCharsets.UTF_8),

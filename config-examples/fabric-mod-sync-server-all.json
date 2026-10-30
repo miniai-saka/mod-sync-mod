@@ -9,5 +9,11 @@
   "verifyHashesBeforeTransfer": false,
   "accessToken": "",
   "maxBytesPerSecond": 0,
+  "allowedIps": [],
+  "deniedIps": [],
+  "logMode": "normal",
+  "logRejectedRequests": true,
+  "logSuccessfulRequests": true,
+  "logTransfers": true,
   "files": {}
 }

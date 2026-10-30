@@ -16,7 +16,10 @@ public final class PackServer implements AutoCloseable {
         this(game, minecraft, loader, standaloneAddress(game));
     }
     public PackServer(Path game, String minecraft, String loader, InetSocketAddress address) throws IOException {
-        service = new PackService(game, minecraft, loader);
+        this(game, minecraft, loader, address, SyncAudit.systemLogger());
+    }
+    public PackServer(Path game, String minecraft, String loader, InetSocketAddress address, SyncAudit.Sink audit) throws IOException {
+        service = new PackService(game, minecraft, loader, audit);
         http = HttpServer.create(address, 32);
         workers = new ThreadPoolExecutor(2, 8, 30, TimeUnit.SECONDS, new ArrayBlockingQueue<>(32), r -> {
             Thread t = new Thread(r, "mod-sync-standalone"); t.setDaemon(true); return t;
@@ -34,19 +37,31 @@ public final class PackServer implements AutoCloseable {
     public int port() { return http.getAddress().getPort(); }
     public Manifest refresh() throws IOException { return service.refresh(); }
     private void handle(HttpExchange x) throws IOException {
+        SyncAudit.Response response = null;
+        long[] sent = {0}; boolean complete = false;
         try {
-            PackService.Reply reply = service.prepare(x.getRequestMethod(), x.getRequestURI().getPath(),
-                    x.getRequestHeaders().getFirst("X-ModSync-Revision"), x.getRequestHeaders().getFirst("Authorization"));
+            String length = x.getRequestHeaders().getFirst("Content-Length");
+            boolean hasBody = x.getRequestHeaders().containsKey("Transfer-Encoding") || (length != null && !"0".equals(length));
+            response = service.openRequest(x.getRequestMethod(), x.getRequestURI().getPath(),
+                    x.getRequestHeaders().getFirst("X-ModSync-Revision"), x.getRequestHeaders().getFirst("Authorization"),
+                    x.getRemoteAddress().getAddress(), hasBody);
+            PackService.Reply reply = response.reply();
             if (reply.discarded()) return;
             reply.headers().forEach((k,v) -> x.getResponseHeaders().set(k,v));
             x.sendResponseHeaders(reply.status(), reply.length());
-            PackService.writeBody(reply, x.getResponseBody());
+            OutputStream body = x.getResponseBody();
+            PackService.writeBody(reply, new OutputStream() {
+                @Override public void write(int b) throws IOException { body.write(b); sent[0]++; }
+                @Override public void write(byte[] b, int offset, int count) throws IOException { body.write(b, offset, count); sent[0] += count; }
+            });
+            body.close(); complete = true;
         } catch (Exception e) {
+            if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             if (x.getResponseCode() == -1) {
                 PackService.Reply error = PackService.Reply.text(500, "Sync request failed");
                 x.sendResponseHeaders(error.status(), error.length()); x.getResponseBody().write(error.body());
             }
-        } finally { x.close(); }
+        } finally { x.close(); if (response != null) response.finish(sent[0], complete); }
     }
     @Override public void close() { http.stop(0); workers.shutdownNow(); }
 }
